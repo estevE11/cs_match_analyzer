@@ -1,0 +1,15 @@
+{
+  "name": "cs_match_analyzer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "node app.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "big-integer": "^1.6.48",
+    "demofile": "^1.8.0"
+  }
+}
