@@ -2,7 +2,7 @@
     "match": {
         "map": "de_inferno",
         "result": "1", 
-        "score": "16,9",
+        "score": [16, 0],
         "date": "2020-12-03,12:30",
         "scoreboard": {
             "esteve": {

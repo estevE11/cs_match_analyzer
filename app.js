@@ -1,77 +1,110 @@
+const YOU = 'STEAM_1:1:64239242';
+let YOU_ID;
+
 const fs = require('fs');
 const demofile = require('demofile');
 
 const player = require('./player');
 
-fs.readFile("test.dem", (err, buffer) => {
+const filename = "test3";
+
+fs.readFile(filename + ".dem", (err, buffer) => {
     analizeDemo(buffer, res => {
-        console.log(match);
+        const str = JSON.stringify(res, null, 2);
+        console.log(res);
+        fs.writeFileSync(filename + ".dem.json", str);
     }); 
 });
 
 function analizeDemo(buffer, callback) {
-    const p = new Promise((success, error) => {
+    const p = new Promise((resolve, reject) => {
         const result = {
+            score: [0, 0],
             scoreboard: []
         };
         
         const demoFile = new demofile.DemoFile();
-    
-        demoFile.on("end", e => {
-            console.log(e);
+        
+        demoFile.on("start", () => {
+            console.log(" > Map: " + demoFile.header.mapName);
+            result.map = demoFile.header.mapName;
+            result.tickRate = "Tick rate:", demoFile.header.tickRate;
+         
+            // Stop parsing - we're finished
+            demoFile.cancel();
         });
-       
-        demoFile.stringTables.on("update", e => {
-          if (e.table.name === "userinfo" && e.userData != null) {
-            if(!e.userData.fakePlayer) return;
-            console.log("\nPlayer name: " + e.userData.name);
-            if(!result.scoreboard[""+e.userData.friendsId]) {
-                const id = ""+e.userData.friendsId;
-                console.log(player.json());
-                result.scoreboard[id] = JSON.parse(player.json());
-                result.scoreboard[id].xuid = e.userData.xuid;
-                result.scoreboard[id].name = e.userData.name;
-                result.scoreboard[id].friendsId = e.userData.friendsId;
-                result.scoreboard[id].guid = e.userData.guid;
+        
+        demoFile.entities.on("create", e => {
+            // We're only interested in player entities being created.
+            if (!(e.entity instanceof demofile.Player)) {
+              return;
             }
-            
-          }
+            const p = e.entity;
+
+            const sid = p.steamId;
+
+            if(sid == "BOT") return;
+            if(!result.scoreboard[sid]) {
+                result.scoreboard[sid] = JSON.parse(JSON.stringify(player));
+                result.scoreboard[sid].name = p.name;
+                result.scoreboard[sid].steamId = p.steamId;
+                result.scoreboard[sid].id = p.userId;
+
+                
+                if(sid == YOU) {
+                    YOU_ID = p.userId;
+                    console.log(p);
+                }
+
+                console.log(` > Player entered   ${p.name} (${p.userId})`);
+            }
         });
-    
+
         demoFile.gameEvents.on("round_officially_ended", e => {
             const teams = demoFile.teams;
-        
+
             const terrorists = teams[2];
             const cts = teams[3];
-        
-            console.log(
-              "\tTerrorists: %s score %d\n\tCTs: %s score %d",
-              terrorists.clanName,
-              terrorists.score,
-              cts.clanName,
-              cts.score
-            );
+            const round = terrorists.score + cts.score;
+
+            const entYou = demoFile.entities.getByUserId(YOU_ID);
+
+            if(round > 15) {
+                result.team = entYou.teamNumber-2;
+            }
+
+            console.log("Round " + round);
+
         });
-        
+
         demoFile.gameEvents.on("player_death", e => {
             const victim = demoFile.entities.getByUserId(e.userid);
-            const victimName = victim ? victim.name : "unnamed";
-         
-            // Attacker may have disconnected so be aware.
-            // e.g. attacker could have thrown a grenade, disconnected, then that grenade
-            // killed another player.
             const attacker = demoFile.entities.getByUserId(e.attacker);
-            const attackerName = attacker ? attacker.name : "unnamed";
-         
-            const headshotText = e.headshot ? "0" : "";
-         
-            console.log(`${attackerName} [${e.weapon}] ---${headshotText}---> ${victimName}`);
-          });
+            if(victim.steamId != "BOT") 
+                result.scoreboard[victim.steamId].deaths++;
 
-          demoFile.on("end", e => {
-            success(result);
-          });
-    
+            if(attacker.steamId != "BOT") {            
+                result.scoreboard[attacker.steamId].kills++;
+                result.scoreboard[attacker.steamId].hs += e.headshot;
+            }
+
+            //console.log(`${attackerName} [${e.weapon}] ---${headshotText}---> ${victimName}`);
+        });
+
+        demoFile.on("end", e => {
+            const teams = demoFile.teams;
+            
+            const entYou = demoFile.entities.getByUserId(YOU_ID);
+
+            const terrorists = teams[2];
+            const cts = teams[3];
+            
+            result.score[0] = terrorists.score;
+            result.score[1] = cts.score;
+            console.log(" > Demo ended!");
+            resolve(result);
+        });
+
         demoFile.parse(buffer);
     });
 
